@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Camera App</title>
+<title>PMCoding Camera Bridge</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 
@@ -16,26 +16,48 @@ body{
     font-family:'Kanit',sans-serif;
     background:#f3f4f6;
 }
-video,canvas{
-    border-radius:20px;
+
+video,
+canvas,
+img{
+    border-radius:24px;
+}
+
+.camera-box{
+    box-shadow:
+    0 10px 30px rgba(0,0,0,.08);
 }
 </style>
 </head>
 
-<body class="min-h-screen flex items-center justify-center p-5">
+<body class="min-h-screen flex items-center justify-center p-4">
 
-<div class="bg-white p-6 rounded-3xl shadow-xl w-full max-w-xl">
+<div class="camera-box bg-white w-full max-w-xl rounded-3xl p-5">
 
-    <h1 class="text-3xl font-bold text-center mb-6">
-        เปิดกล้องด้วย GitHub Pages
-    </h1>
+    <!-- TITLE -->
+    <div class="text-center mb-5">
+
+        <div class="text-5xl mb-3">
+            📷
+        </div>
+
+        <h1 class="text-3xl font-bold text-gray-800">
+            Camera Bridge
+        </h1>
+
+        <p class="text-gray-500 mt-2">
+            GitHub Pages สำหรับเปิดกล้องแทน Apps Script
+        </p>
+
+    </div>
 
     <!-- VIDEO -->
     <video
         id="video"
         autoplay
         playsinline
-        class="w-full bg-black">
+        muted
+        class="w-full bg-black aspect-video object-cover">
     </video>
 
     <!-- CANVAS -->
@@ -47,36 +69,39 @@ video,canvas{
     <!-- PREVIEW -->
     <img
         id="preview"
-        class="mt-4 rounded-2xl hidden w-full">
+        class="hidden mt-4 w-full object-cover">
 
-    <!-- BUTTON -->
-    <div class="grid grid-cols-2 gap-4 mt-6">
+    <!-- BUTTONS -->
+    <div class="grid grid-cols-2 gap-4 mt-5">
 
         <button
-            onclick="startCamera()"
-            class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl text-lg">
+            id="btnStart"
+            class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl text-lg font-semibold transition">
 
             เปิดกล้อง
         </button>
 
         <button
-            onclick="capturePhoto()"
-            class="bg-green-600 hover:bg-green-700 text-white py-3 rounded-2xl text-lg">
+            id="btnCapture"
+            class="bg-green-600 hover:bg-green-700 text-white py-3 rounded-2xl text-lg font-semibold transition">
 
             ถ่ายรูป
         </button>
 
     </div>
 
+    <!-- SEND -->
     <button
-        onclick="uploadPhoto()"
-        class="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-2xl text-lg">
+        id="btnSend"
+        class="w-full mt-4 bg-red-600 hover:bg-red-700 text-white py-3 rounded-2xl text-lg font-semibold transition">
 
-        ส่งเข้า Apps Script
+        ส่งกลับ Apps Script
     </button>
 
-    <div id="status"
-        class="text-center mt-4 text-gray-700">
+    <!-- STATUS -->
+    <div
+        id="status"
+        class="text-center text-gray-600 mt-4">
     </div>
 
 </div>
@@ -86,60 +111,101 @@ video,canvas{
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const preview = document.getElementById('preview');
+const statusText = document.getElementById('status');
+
+const btnStart = document.getElementById('btnStart');
+const btnCapture = document.getElementById('btnCapture');
+const btnSend = document.getElementById('btnSend');
 
 let imageBase64 = '';
+let stream = null;
 
 
-// =========================
-// เปิดกล้อง
-// =========================
+// ==============================
+// START CAMERA
+// ==============================
 
-async function startCamera(){
+btnStart.addEventListener('click', async () => {
 
     try{
 
-        const stream =
-        await navigator.mediaDevices.getUserMedia({
+        statusText.innerHTML = 'กำลังเปิดกล้อง...';
+
+        stream = await navigator.mediaDevices.getUserMedia({
             video:{
-                facingMode:'environment'
+                facingMode:'environment',
+                width:{ideal:1280},
+                height:{ideal:720}
             },
             audio:false
         });
 
         video.srcObject = stream;
 
+        statusText.innerHTML = 'เปิดกล้องสำเร็จ';
+
     }catch(err){
 
-        alert('ไม่สามารถเปิดกล้องได้ : ' + err.message);
+        console.error(err);
+
+        statusText.innerHTML =
+        'ไม่สามารถเปิดกล้องได้';
+
+        alert(
+            'เปิดกล้องไม่สำเร็จ\n\n' +
+            err.message
+        );
     }
-}
+
+});
 
 
-// =========================
-// ถ่ายรูป
-// =========================
+// ==============================
+// CAPTURE PHOTO
+// ==============================
 
-function capturePhoto(){
+btnCapture.addEventListener('click', () => {
+
+    if(!video.srcObject){
+
+        alert('กรุณาเปิดกล้องก่อน');
+        return;
+    }
 
     const ctx = canvas.getContext('2d');
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    ctx.drawImage(video,0,0);
+    ctx.drawImage(
+        video,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 
-    imageBase64 = canvas.toDataURL('image/jpeg',0.8);
+    imageBase64 =
+    canvas.toDataURL(
+        'image/jpeg',
+        0.9
+    );
 
     preview.src = imageBase64;
+
     preview.classList.remove('hidden');
-}
+
+    statusText.innerHTML =
+    'ถ่ายรูปสำเร็จ';
+
+});
 
 
-// =========================
-// ส่งเข้า Apps Script
-// =========================
+// ==============================
+// SEND TO APPS SCRIPT
+// ==============================
 
-async function uploadPhoto(){
+btnSend.addEventListener('click', () => {
 
     if(!imageBase64){
 
@@ -147,35 +213,75 @@ async function uploadPhoto(){
         return;
     }
 
-    document.getElementById('status').innerHTML =
-    'กำลังอัปโหลด...';
+    // ส่งกลับหน้าแม่ (Apps Script)
 
-    try{
+    if(window.opener){
 
-        const response = await fetch(
-        'https://script.google.com/macros/s/AKfycbwp5kUSZJ1CMnUfnsC4keqk39JCu2Vry23GPok2ZRFzuS_EqKg6b8wmt7BLVbAobhcH/exec',
-        {
-            method:'POST',
-            body:JSON.stringify({
-                image:imageBase64
-            })
-        });
+        window.opener.postMessage({
 
-        const result = await response.text();
+            type:'camera-result',
 
-        document.getElementById('status').innerHTML =
-        'อัปโหลดสำเร็จ';
+            image:imageBase64,
 
-        console.log(result);
+            time:new Date().toISOString()
 
-    }catch(err){
+        }, '*');
 
-        document.getElementById('status').innerHTML =
-        'อัปโหลดไม่สำเร็จ';
+        statusText.innerHTML =
+        'ส่งข้อมูลกลับแล้ว';
 
-        console.error(err);
+        // ปิดหน้ากล้อง
+
+        setTimeout(() => {
+
+            window.close();
+
+        }, 1000);
+
+    }else{
+
+        // กรณีเปิดเดี่ยว
+
+        statusText.innerHTML =
+        'ไม่ได้เปิดจาก Apps Script';
+
+        console.log(imageBase64);
     }
-}
+
+});
+
+
+// ==============================
+// AUTO START ON MOBILE
+// ==============================
+
+window.addEventListener('load', () => {
+
+    // มือถือบางเครื่องต้อง interaction ก่อน
+    // จึงไม่ auto start จริง
+
+    statusText.innerHTML =
+    'กด "เปิดกล้อง" เพื่อเริ่มใช้งาน';
+
+});
+
+
+// ==============================
+// STOP CAMERA WHEN EXIT
+// ==============================
+
+window.addEventListener('beforeunload', () => {
+
+    if(stream){
+
+        stream.getTracks().forEach(track => {
+
+            track.stop();
+
+        });
+    }
+
+});
 
 </script>
 
