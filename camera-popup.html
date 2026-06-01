@@ -673,28 +673,61 @@ function retake(){
 }
 
 // ── QR ────────────────────────────────────────────────────────
-function startQR(){
-  if(_qrInt) clearInterval(_qrInt);
-  const v=document.getElementById('vid');
-  const c=document.getElementById('cvs');
-  const ctx=c.getContext('2d');
-  _qrInt = setInterval(()=>{
-    if(!_stream||_qrCool) return;
-    if(v.readyState<v.HAVE_ENOUGH_DATA) return;
-    c.width=v.videoWidth; c.height=v.videoHeight;
-    ctx.drawImage(v,0,0);
-    try{
-      if(typeof jsQR!=='undefined'){
-        const img=ctx.getImageData(0,0,c.width,c.height);
-        const code=jsQR(img.data,img.width,img.height);
-        if(code&&code.data&&code.data!==_lastQR){
-          _lastQR=code.data; onQR(code.data);
-          _qrCool=true; setTimeout(()=>{_qrCool=false;},3000);
+// 1️⃣ แทนที่ฟังก์ชัน startQR() เดิม ด้วยชุดสแกนเรียลไทม์นี้ครับ
+let _qrInt = null;
+let _lastQR = '';
+let _qrCool = false;
+
+function startQR() {
+  if (_qrInt) clearInterval(_qrInt);
+  const v = document.getElementById('vid');
+  const c = document.getElementById('cvs');
+  const ctx = c.getContext('2d');
+  
+  setSt('📱 กล้องพร้อมตรวจจับ — กรุณาส่อง QR Code', 'ready');
+
+  _qrInt = setInterval(() => {
+    if (!_stream || _mode !== 'qr' || v.videoWidth === 0 || _qrCool) return;
+    
+    c.width = v.videoWidth; 
+    c.height = v.videoHeight;
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    
+    try {
+      if (typeof jsQR !== 'undefined') {
+        const imgData = ctx.getImageData(0, 0, c.width, c.height);
+        const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "dontInvert" });
+        
+        if (code && code.data && code.data !== _lastQR) {
+          _lastQR = code.data;
+          _qrCool = true;
+          setTimeout(() => { _qrCool = false; _lastQR = ''; }, 3000); // หน่วงเวลา 3 วิ ไม่ให้สแกนรหัสเดิมรัวๆ
+          
+          // 🚀 เจอคิวอาร์ปุ๊บ ยิงรหัสกลับหน้าหลักให้ตรวจสอบทันที!
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({ type: 'QR_CODE_REALTIME', code: code.data }, _allowOrigin);
+          }
         }
       }
-    }catch(e){}
-  },350);
+    } catch(e) {}
+  }, 300); // ตั้งให้สแกนทุก ๆ 300 มิลลิวินาที
 }
+
+// 2️⃣ ปรับปรุงเงื่อนไขแจ้งเตือนเวลาไม่พบ QR ใน window.addEventListener('message') เล็กน้อย
+// ค้นหา if (d.type === 'SCAN_FAILED') แล้วเปลี่ยนเป็นแบบนี้ครับ:
+  else if (d.type === 'SCAN_FAILED') {
+    if (!_statusTimeout) {
+      if (d.isQR) {
+        setSt(`❌ ไม่พบรหัส ${d.code} ในระบบฐานข้อมูล`, 'err');
+      } else {
+        setSt(`🔍 ไม่พบประวัติใบหน้าในระบบ (ความเบี่ยงเบน: ${d.distance.toFixed(2)})`, 'scan');
+      }
+      
+      // ล็อกข้อความแจ้งเตือนไว้ 3 วินาที
+      if (_statusTimeout) clearTimeout(_statusTimeout);
+      _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 3000);
+    }
+  }
 
 function onQR(code){
   setSt('สแกน QR สำเร็จ: '+code,'ready');
