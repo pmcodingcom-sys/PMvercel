@@ -6,6 +6,7 @@
 <title>📷 Camera — FaceAttend AI</title>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
 <style>
 :root{
   --p1:#7c3aed;--p2:#a855f7;--b1:#3b82f6;--c1:#06b6d4;
@@ -409,11 +410,50 @@ function switchMode(m, silent){
 }
 
 // ── CAMERA ────────────────────────────────────────────────────
+// ➕ เพิ่มตัวแปรควบคุมสถานะเรียลไทม์ด้านบนสุดของสคริปต์ใน camera-popup.html
+let _localFaceMatcher = null;
+let _isModelLoaded = false;
+let _scanLoopActive = false;
+let _studentCooldowns = {}; // เก็บข้อมูลห้ามสแกนซ้ำชั่วคราว
+
+// ➕ รับข้อมูลแปลงพันธุกรรมใบหน้าจากหน้าจอหลัก (index.html)
+window.addEventListener('message', async function(event) {
+  const d = event.data;
+  if (!d || typeof d !== 'object') return;
+  
+  if (d.type === 'SET_FACE_CACHE' && d.cache) {
+    // โหลดโมเดล AI มารองรับก่อนสร้าง Matcher
+    if (!_isModelLoaded) {
+      setSt('กำลังโหลดสมองกล AI ประจำกล้อง...','scan');
+      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+      await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      _isModelLoaded = true;
+    }
+
+    // แปลงข้อมูลอาร์เรย์ที่ส่งมา กลับมาเป็นวัตถุของ face-api
+    const labeledDescriptors = d.cache.map(item => {
+      return new faceapi.LabeledFaceDescriptors(item.label, [new Float32Array(item.descriptor)]);
+    });
+    
+    _localFaceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55);
+    setSt('เชื่อมต่อ AI เรียลไทม์สำเร็จ! พร้อมตรวจจับ','ready');
+    
+    // เริ่มต้นรันลูปสแกนใบหน้าจากวิดีโอสดทันที
+    if (_mode === 'face' && _stream) {
+      _scanLoopActive = true;
+      requestAnimationFrame(processVideoFrameRealtime);
+    }
+  }
+});
+
+// ➕ ฟังก์ชันเปิดกล้องเดิม: เพิ่มการยิงสัญญาณบอกหน้าหลักว่ากล้องตื่นแล้ว มารับตัวเลขสแกนได้เลย
 function openCam(){
   if(_stream) return;
   setSt('กำลังเปิดกล้อง...','scan');
   navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:_facing, width:{ideal:1280}, height:{ideal:720} }
+    video:{ facingMode:_facing, width:{ideal:640}, height:{ideal:480} } // ลดความละเอียดลงเล็กน้อยเพื่อให้ลื่นไหลบนมือถือ
   }).then(s=>{
     _stream = s;
     const v = document.getElementById('vid');
@@ -423,19 +463,79 @@ function openCam(){
     document.getElementById('prev-badge').style.display = 'none';
     document.getElementById('btn-open').style.display = 'none';
     document.getElementById('btn-stop').style.display = 'flex';
-    document.getElementById('row-shutter').style.display = 'flex';
     document.getElementById('confirm-card').classList.remove('show');
     _b64 = null;
-    if(_mode==='qr') startQR();
-    setSt('กล้องพร้อมใช้งาน','ready');
+    
+    if(_mode==='qr') {
+      startQR();
+    } else if(_mode === 'face') {
+      // ⚡ ตะโกนบอกหน้าจอหลักว่ากล้องเปิดแล้ว ส่ง Cache ใบหน้ามาให้ที
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: 'CAMERA_READY' }, _allowOrigin);
+      }
+    }
+    setSt('กล้องออนไลน์เรียบร้อย','ready');
   }).catch(e=>{
     setSt('ไม่สามารถเปิดกล้อง: '+e.message,'err');
-    document.getElementById('no-cam').innerHTML =
-      '<div class="no-cam-icon">⚠️</div><div style="font-size:11px;color:#ef4444;text-align:center;padding:0 12px;">กล้องถูกปฏิเสธ<br>กรุณาอนุญาตในเบราว์เซอร์</div>';
   });
 }
 
+// ➕ ⚡ ฟังก์ชันหัวใจหลัก: ลูปตรวจจับใบหน้าจากวิดีโอสดแบบ Real-time
+async function processVideoFrameRealtime() {
+  if (!_stream || !_scanLoopActive || _mode !== 'face' || !_localFaceMatcher) return;
+  
+  const v = document.getElementById('vid');
+  if (v.readyState === v.HAVE_ENOUGH_DATA) {
+    try {
+      // สแกนหาใบหน้าจากสตรีมวิดีโอเฟรมปัจจุบัน
+      const detection = await faceapi.detectSingleFace(v)
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (detection) {
+        // นำตัวเลขใบหน้าที่จับได้ไปเทียบกับคลังข้อมูลความเร็วสูง
+        const match = _localFaceMatcher.findBestMatch(detection.descriptor);
+        
+        if (match.label !== 'unknown') {
+          const [studentId, firstName, lastName, classRoom] = match.label.split('_');
+          const now = Date.now();
+
+          // ตรวจสอบระบบ Cooldown ป้องกันไม่ให้ชื่อเดิมเด้งซ้ำกันภายใน 4 วินาที
+          if (!_studentCooldowns[studentId] || (now - _studentCooldowns[studentId] > 4000)) {
+            _studentCooldowns[studentId] = now; // ลงบันทึกเวลาที่สแกนล่าสุด
+
+            // สั่งเอฟเฟกต์ไฟแฟลชสีเขียวแวบหนึ่งบนหน้าจอให้ครูรู้ว่าผ่านแล้ว
+            const fl = document.getElementById('flash');
+            fl.style.background = '#10b981';
+            fl.classList.add('go'); 
+            setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
+
+            setSt(`✨ เช็คชื่อสำเร็จ: ${firstName} (${classRoom})`, 'ready');
+
+            // 🚀 ยิงข้อมูลกลับไปที่หน้าหลักเพื่อสั่งบันทึกลง Google Sheets ทันทีอัตโนมัติ!
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({
+                type: 'REALTIME_FACE_MATCHED',
+                studentId, studentName: firstName + ' ' + lastName, classRoom
+              }, _allowOrigin);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('ข้อผิดพลาดลูปรันไทม์:', err);
+    }
+  }
+  
+  // เรียกตัวเองวนไปเรื่อยๆ เพื่อดักจับใบหน้าแบบลื่นไหลไร้รอยต่อ
+  if (_scanLoopActive) {
+    setTimeout(() => { requestAnimationFrame(processVideoFrameRealtime); }, 100); // ดีเลย์ 100ms เพื่อประหยัดแบตเตอรี่เครื่อง
+  }
+}
+
+// ปรับฟังก์ชันหยุดกล้องเดิมให้เคลียร์ลูปเรียลไทม์ด้วย
 function stopCam(silent){
+  _scanLoopActive = false; // ➕ สั่งหยุดลูปเรียลไทม์
   if(_qrInt){ clearInterval(_qrInt); _qrInt=null; }
   if(_stream){ _stream.getTracks().forEach(t=>t.stop()); _stream=null; }
   const v=document.getElementById('vid'); if(v){ v.srcObject=null; v.style.display='none'; }
