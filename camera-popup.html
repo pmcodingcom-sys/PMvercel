@@ -356,6 +356,11 @@ let _allowOrigin = '*';
   const m = p.get('mode') || 'face';
   const o = p.get('origin');
   if(o) _allowOrigin = decodeURIComponent(o);
+  
+  // 💡 จุดเซฟตี้เน็ต: ป้องกันเบราว์เซอร์บล็อกกรณี Sandbox ของ Google ส่งค่า origin เป็นคำว่า "null"
+  if(_allowOrigin === 'null' || _allowOrigin === 'undefined' || !_allowOrigin) {
+    _allowOrigin = '*'; 
+  }
   switchMode(m, true);
   openCam();
 })();
@@ -571,11 +576,12 @@ function startFaceStream() {
   _faceInt = setInterval(() => {
     if(!_stream) return;
     
-    // 💡 ปรับปรุงตรงนี้: เปลี่ยนจาก readyState เป็นตรวจเช็คขนาดวิดีโอแทน 
-    // เพื่อป้องกันไม่ให้ลูปกล้องหยุดส่งข้อมูล (นิ่ง) เวลาหน้าต่าง Popup เสียโฟกัสไปแอบอยู่หลังหน้าจอหลัก
-    if(v.videoWidth === 0) return;
-    
-    c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
+    // 💡 แก้ไขบั๊กตัวหลัก: ดึงตรรกะดั้งเดิมเหมือนฟังก์ชัน shoot() ของคุณมาใช้ (v.videoWidth || 640)
+    // ถอดคำสั่ง "if === 0 return" ตัวเก่าออก เพื่อไม่ให้กล้องติดลูปนิ่งสนิทอีกต่อไปครับ
+    const w = v.videoWidth || 640;
+    const h = v.videoHeight || 480;
+    c.width = w; 
+    c.height = h;
     
     if(_facing === 'user') {
       ctx.save(); ctx.translate(c.width, 0); ctx.scale(-1, 1);
