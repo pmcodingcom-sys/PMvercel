@@ -361,6 +361,7 @@ let _stream = null, _facing = 'user', _b64 = null;
 let _mode = 'face', _q = 0.88;
 let _qrInt = null, _lastQR = '', _qrCool = false;
 let _allowOrigin = '*';
+let _streamInterval = null;
 
 // ── INIT ──────────────────────────────────────────────────────
 (function(){
@@ -369,49 +370,32 @@ let _allowOrigin = '*';
   const o = p.get('origin');
   if(o) _allowOrigin = decodeURIComponent(o);
   switchMode(m, true);
-  // auto-open
   openCam();
 })();
 
-// ── MODE ──────────────────────────────────────────────────────
 function switchMode(m, silent){
   _mode = m;
-  ['face','qr','photo'].forEach(x =>
-    document.getElementById('tab-'+x).classList.toggle('active', x===m)
-  );
-  // overlay
+  ['face','qr','photo'].forEach(x => document.getElementById('tab-'+x).classList.toggle('active', x===m));
+  
   const fr = document.getElementById('face-ring');
   const sl = document.getElementById('scan-ln');
-  const ol = document.getElementById('vf-ol');
-  const oldQR = ol.querySelector('.qr-box');
-  if(oldQR) oldQR.remove();
-  sl.style.display = 'none';
-  fr.style.display = 'none';
+  if (sl) sl.style.display = m === 'qr' ? '' : 'none';
+  if (fr) fr.style.display = m === 'face' ? '' : 'none';
 
   if(m==='face'){
-    fr.style.display = '';
     _facing = 'user';
-    document.getElementById('hdr-sub').textContent = 'โหมด: สแกนใบหน้า AI';
-    document.getElementById('confirm-hint').textContent = 'ตรวจสอบใบหน้า แล้วกด "ตกลง ใช้รูปนี้" เพื่อวิเคราะห์';
+    document.getElementById('hdr-sub').textContent = 'โหมด: สแกนใบหน้าเรียลไทม์อัตโนมัติ';
   } else if(m==='qr'){
-    const d=document.createElement('div'); d.className='qr-box'; ol.appendChild(d);
-    sl.style.display = '';
     _facing = 'environment';
     document.getElementById('hdr-sub').textContent = 'โหมด: สแกน QR / บาร์โค้ด';
   } else {
     _facing = 'environment';
     document.getElementById('hdr-sub').textContent = 'โหมด: ถ่ายรูปโปรไฟล์นักเรียน';
-    document.getElementById('confirm-hint').textContent = 'ตรวจสอบรูปโปรไฟล์ แล้วกด "ตกลง ใช้รูปนี้"';
   }
   document.getElementById('row-quality').style.display   = m==='photo' ? '' : 'none';
   document.getElementById('row-qr-manual').style.display = m==='qr'    ? '' : 'none';
   document.getElementById('qr-res').classList.remove('show');
   
-  // 🛠️ เพิ่มโค้ดบรรทัดนี้เข้าไปท้ายสุดของฟังก์ชัน เพื่อซ่อน/แสดงปุ่มชัตเตอร์ตอนสลับแท็บเมนู
-  if (_stream) {
-    document.getElementById('row-shutter').style.display = m === 'photo' ? 'flex' : 'none';
-  }
-
   if(_stream && !silent){ stopCam(true); setTimeout(openCam, 280); }
 }
 
@@ -461,43 +445,90 @@ if (d.type === 'SET_FACE_CACHE' && d.cache) {
 });
 
 // ➕ ฟังก์ชันเปิดกล้องเดิม: เพิ่มการยิงสัญญาณบอกหน้าหลักว่ากล้องตื่นแล้ว มารับตัวเลขสแกนได้เลย
-// ค้นหาฟังก์ชัน openCam() เดิมใน camera-popup.html แล้วปรับตรงช่วงนี้ครับ
 function openCam(){
   if(_stream) return;
-  setSt('กำลังเปิดกล้อง...','scan');
+  setSt('กำลังเปิดระบบกล้อง...','scan');
   navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:_facing, width:{ideal:640}, height:{ideal:480} }
+    video:{ facingMode:_facing, width:{ideal:480}, height:{ideal:360} } // สเกลขนาดภาพที่พอดี เพื่อให้ส่งข้อมูลข้ามหน้าต่างได้เร็วที่สุด
   }).then(s=>{
     _stream = s;
     const v = document.getElementById('vid');
     v.srcObject = s; v.style.display = 'block';
     document.getElementById('no-cam').style.display = 'none';
     document.getElementById('prev-img').style.display = 'none';
-    document.getElementById('prev-badge').style.display = 'none';
     document.getElementById('btn-open').style.display = 'none';
     document.getElementById('btn-stop').style.display = 'flex';
-    
-    // 🛠️ แก้ไขบรรทัดนี้: โชว์ปุ่มชัตเตอร์ 📸 เฉพาะโหมดโปรไฟล์ (photo) เท่านั้น โหมดอื่นซ่อนทิ้งเลย
-    if (_mode === 'photo') {
-      document.getElementById('row-shutter').style.display = 'flex';
-    } else {
-      document.getElementById('row-shutter').style.display = 'none';
-    }
-    
+    document.getElementById('row-shutter').style.display = _mode === 'photo' ? 'flex' : 'none';
     document.getElementById('confirm-card').classList.remove('show');
     _b64 = null;
     
     if(_mode==='qr') {
       startQR();
     } else if(_mode === 'face') {
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'CAMERA_READY' }, _allowOrigin);
-      }
+      setSt('กล้องพร้อมตรวจจับ — กรุณาส่องใบหน้า','ready');
+      startRealtimeFrameStream(); // ⚡ เริ่มลูปยิงภาพสดกลับหน้าหลักทันที
     }
-    setSt('กล้องออนไลน์ — กำลังสแกนเรียลไทม์...','ready'); // ปรับข้อความสถานะให้ชัดเจน
   }).catch(e=>{
-    setSt('ไม่สามารถเปิดกล้อง: '+e.message,'err');
+    setSt('เปิดกล้องพลาด: '+e.message,'err');
   });
+}
+
+// ⚡ ลูปแคปหน้าจอกล้องส่งสตรีมภาพกลับไปให้หน้าดั้งเดิม (index.html) ประมวลผลทุกๆ 350ms
+function startRealtimeFrameStream() {
+  if (_streamInterval) clearInterval(_streamInterval);
+  const v = document.getElementById('vid');
+  const c = document.getElementById('cvs');
+  const ctx = c.getContext('2d');
+
+  _streamInterval = setInterval(() => {
+    if (!_stream || _mode !== 'face' || v.videoWidth === 0) return;
+
+    c.width = 320;
+    c.height = 240;
+    
+    if (_facing === 'user') {
+      ctx.translate(c.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    const frameBase64 = c.toDataURL('image/jpeg', 0.45); // บีบอัดภาพเพื่อความรวดเร็วในการส่งสัญญาณ
+
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage({ type: 'STREAM_FRAME', image: frameBase64 }, _allowOrigin);
+    }
+  }, 350); 
+}
+
+// 👂 ดักรอรับผลการตรวจสอบใบหน้าที่หน้าหลักคำนวณเสร็จแล้ว สะท้อนกลับมาโชว์บนหน้าจอครู
+window.addEventListener('message', function(event) {
+  const d = event.data;
+  if (!d || typeof d !== 'object') return;
+
+  if (d.type === 'SCAN_SUCCESS') {
+    const fl = document.getElementById('flash');
+    fl.style.background = '#10b981'; // ยิงแฟลชเขียวเมื่อบันทึกผ่านสำเร็จ
+    fl.classList.add('go'); 
+    setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
+    setSt(`✨ บันทึกสำเร็จ: ${d.name} (${d.classRoom})`, 'ready');
+  } 
+  else if (d.type === 'SCAN_FAILED') {
+    setSt(`🔍 กำลังสแกน... ใบหน้าไม่ตรงกับฐานข้อมูล (ความเบี่ยงเบน: ${d.distance.toFixed(2)})`, 'scan');
+  } 
+  else if (d.type === 'SCAN_EMPTY') {
+    setSt('📷 กำลังค้นหาใบหน้า... กรุณาขยับเข้ามาใกล้กรอบวงกลม', 'ready');
+  }
+});
+
+function stopCam(silent){
+  if (_streamInterval) { clearInterval(_streamInterval); _streamInterval = null; }
+  if(_qrInt){ clearInterval(_qrInt); _qrInt=null; }
+  if(_stream){ _stream.getTracks().forEach(t=>t.stop()); _stream=null; }
+  const v=document.getElementById('vid'); if(v){ v.srcObject=null; v.style.display='none'; }
+  document.getElementById('no-cam').style.display='flex';
+  document.getElementById('btn-open').style.display='flex';
+  document.getElementById('btn-stop').style.display='none';
+  document.getElementById('row-shutter').style.display='none';
+  if(!silent) setSt('หยุดกล้องแล้ว','idle');
 }
 
 // ➕ ⚡ ฟังก์ชันหัวใจหลัก: ลูปตรวจจับใบหน้าจากวิดีโอสดแบบ Real-time
@@ -555,19 +586,6 @@ async function processVideoFrameRealtime() {
   if (_scanLoopActive) {
     setTimeout(() => { requestAnimationFrame(processVideoFrameRealtime); }, 100);
   }
-}
-
-// ปรับฟังก์ชันหยุดกล้องเดิมให้เคลียร์ลูปเรียลไทม์ด้วย
-function stopCam(silent){
-  _scanLoopActive = false; // ➕ สั่งหยุดลูปเรียลไทม์
-  if(_qrInt){ clearInterval(_qrInt); _qrInt=null; }
-  if(_stream){ _stream.getTracks().forEach(t=>t.stop()); _stream=null; }
-  const v=document.getElementById('vid'); if(v){ v.srcObject=null; v.style.display='none'; }
-  document.getElementById('no-cam').style.display='flex';
-  document.getElementById('btn-open').style.display='flex';
-  document.getElementById('btn-stop').style.display='none';
-  document.getElementById('row-shutter').style.display='none';
-  if(!silent) setSt('หยุดกล้องแล้ว','idle');
 }
 
 function flipCam(){
