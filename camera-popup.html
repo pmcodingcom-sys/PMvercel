@@ -673,8 +673,10 @@ function retake(){
   setSt('พร้อมถ่ายภาพ','ready');
 }
 
-// ── QR ───────────────────────────────────────────────────────
+// ── QR ────────────────────────────────────────────────────────
+let _qrCool = false;
 
+// แทนที่ฟังก์ชัน startQR() ทั้งบล็อก
 function startQR() {
   if (_qrInt) clearInterval(_qrInt);
   const v = document.getElementById('vid');
