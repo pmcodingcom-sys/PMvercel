@@ -427,31 +427,37 @@ window.addEventListener('message', async function(event) {
   const d = event.data;
   if (!d || typeof d !== 'object') return;
   
-  if (d.type === 'SET_FACE_CACHE' && d.cache) {
-    // โหลดโมเดล AI มารองรับก่อนสร้าง Matcher
-    if (!_isModelLoaded) {
-      setSt('กำลังโหลดสมองกล AI ประจำกล้อง...','scan');
-      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
-      await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-      _isModelLoaded = true;
-    }
-
-    // แปลงข้อมูลอาร์เรย์ที่ส่งมา กลับมาเป็นวัตถุของ face-api
-    const labeledDescriptors = d.cache.map(item => {
-      return new faceapi.LabeledFaceDescriptors(item.label, [new Float32Array(item.descriptor)]);
-    });
-    
-    _localFaceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55);
-    setSt('เชื่อมต่อ AI เรียลไทม์สำเร็จ! พร้อมตรวจจับ','ready');
-    
-    // เริ่มต้นรันลูปสแกนใบหน้าจากวิดีโอสดทันที
-    if (_mode === 'face' && _stream) {
-      _scanLoopActive = true;
-      requestAnimationFrame(processVideoFrameRealtime);
-    }
+  // ค้นหาจุดนี้ในสคริปต์ของ camera-popup.html แล้วปรับเพิ่มสเตตัสดักไว้ครับ
+if (d.type === 'SET_FACE_CACHE' && d.cache) {
+  if (!_isModelLoaded) {
+    setSt('กำลังโหลดสมองกล AI ประจำกล้อง...','scan');
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    _isModelLoaded = true;
   }
+
+  const labeledDescriptors = d.cache.map(item => {
+    return new faceapi.LabeledFaceDescriptors(item.label, [new Float32Array(item.descriptor)]);
+  });
+  
+  // 💡 ➕ ใส่โค้ดดักจับตรงนี้เพื่อป้องกันการพังโครม!
+  if (labeledDescriptors.length === 0) {
+    setSt('❌ ไม่มีข้อมูลใบหน้าในระบบ (รูปภาพนักเรียนอาจเสีย, ติด CORS หรือยังไม่ได้อัปโหลดรูป)', 'err');
+    _scanLoopActive = false;
+    return; // สั่งหยุดทำงานตรงนี้ ไม่ปล่อยให้ไปนิว FaceMatcher จนเกิด Error
+  }
+  
+  // โค้ดเดิมจะทำงานต่อได้อย่างปลอดภัยถ้ามีข้อมูลอย่างน้อย 1 คน
+  _localFaceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55);
+  setSt('เชื่อมต่อ AI เรียลไทม์สำเร็จ! พร้อมตรวจจับ','ready');
+  
+  if (_mode === 'face' && _stream) {
+    _scanLoopActive = true;
+    requestAnimationFrame(processVideoFrameRealtime);
+  }
+}
 });
 
 // ➕ ฟังก์ชันเปิดกล้องเดิม: เพิ่มการยิงสัญญาณบอกหน้าหลักว่ากล้องตื่นแล้ว มารับตัวเลขสแกนได้เลย
