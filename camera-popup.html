@@ -406,6 +406,12 @@ function switchMode(m, silent){
   document.getElementById('row-quality').style.display   = m==='photo' ? '' : 'none';
   document.getElementById('row-qr-manual').style.display = m==='qr'    ? '' : 'none';
   document.getElementById('qr-res').classList.remove('show');
+  
+  // 🛠️ เพิ่มโค้ดบรรทัดนี้เข้าไปท้ายสุดของฟังก์ชัน เพื่อซ่อน/แสดงปุ่มชัตเตอร์ตอนสลับแท็บเมนู
+  if (_stream) {
+    document.getElementById('row-shutter').style.display = m === 'photo' ? 'flex' : 'none';
+  }
+
   if(_stream && !silent){ stopCam(true); setTimeout(openCam, 280); }
 }
 
@@ -449,11 +455,12 @@ window.addEventListener('message', async function(event) {
 });
 
 // ➕ ฟังก์ชันเปิดกล้องเดิม: เพิ่มการยิงสัญญาณบอกหน้าหลักว่ากล้องตื่นแล้ว มารับตัวเลขสแกนได้เลย
+// ค้นหาฟังก์ชัน openCam() เดิมใน camera-popup.html แล้วปรับตรงช่วงนี้ครับ
 function openCam(){
   if(_stream) return;
   setSt('กำลังเปิดกล้อง...','scan');
   navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:_facing, width:{ideal:640}, height:{ideal:480} } // ลดความละเอียดลงเล็กน้อยเพื่อให้ลื่นไหลบนมือถือ
+    video:{ facingMode:_facing, width:{ideal:640}, height:{ideal:480} }
   }).then(s=>{
     _stream = s;
     const v = document.getElementById('vid');
@@ -463,18 +470,25 @@ function openCam(){
     document.getElementById('prev-badge').style.display = 'none';
     document.getElementById('btn-open').style.display = 'none';
     document.getElementById('btn-stop').style.display = 'flex';
+    
+    // 🛠️ แก้ไขบรรทัดนี้: โชว์ปุ่มชัตเตอร์ 📸 เฉพาะโหมดโปรไฟล์ (photo) เท่านั้น โหมดอื่นซ่อนทิ้งเลย
+    if (_mode === 'photo') {
+      document.getElementById('row-shutter').style.display = 'flex';
+    } else {
+      document.getElementById('row-shutter').style.display = 'none';
+    }
+    
     document.getElementById('confirm-card').classList.remove('show');
     _b64 = null;
     
     if(_mode==='qr') {
       startQR();
     } else if(_mode === 'face') {
-      // ⚡ ตะโกนบอกหน้าจอหลักว่ากล้องเปิดแล้ว ส่ง Cache ใบหน้ามาให้ที
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage({ type: 'CAMERA_READY' }, _allowOrigin);
       }
     }
-    setSt('กล้องออนไลน์เรียบร้อย','ready');
+    setSt('กล้องออนไลน์ — กำลังสแกนเรียลไทม์...','ready'); // ปรับข้อความสถานะให้ชัดเจน
   }).catch(e=>{
     setSt('ไม่สามารถเปิดกล้อง: '+e.message,'err');
   });
