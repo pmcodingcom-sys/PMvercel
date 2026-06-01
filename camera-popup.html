@@ -716,10 +716,8 @@ function startQR() {
       }
     } catch(e) {}
   }, 300); 
-}
 
 // 2️⃣ ปรับปรุงเงื่อนไขแจ้งเตือนเวลาไม่พบ QR ใน window.addEventListener('message') เล็กน้อย
-// ค้นหา if (d.type === 'SCAN_FAILED') แล้วเปลี่ยนเป็นแบบนี้ครับ:
   else if (d.type === 'SCAN_FAILED') {
     if (!_statusTimeout) {
       if (d.isQR) {
@@ -733,6 +731,7 @@ function startQR() {
       _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 3000);
     }
   }
+}
 
 function onQR(code){
   setSt('สแกน QR สำเร็จ: '+code,'ready');
