@@ -499,34 +499,32 @@ async function processVideoFrameRealtime() {
   if (!_stream || !_scanLoopActive || _mode !== 'face' || !_localFaceMatcher) return;
   
   const v = document.getElementById('vid');
-  if (v.readyState === v.HAVE_ENOUGH_DATA) {
+  
+  // 1. เปลี่ยนเงื่อนไขมาเช็คขนาดความกว้างวิดีโอจริง (ยืดหยุ่นและปลอดภัยสูงสุดในระบบกล้อง Web)
+  if (v.videoWidth > 0) { 
     try {
-      // สแกนหาใบหน้าจากสตรีมวิดีโอเฟรมปัจจุบัน
       const detection = await faceapi.detectSingleFace(v)
         .withFaceLandmarks()
         .withFaceDescriptor();
 
       if (detection) {
-        // นำตัวเลขใบหน้าที่จับได้ไปเทียบกับคลังข้อมูลความเร็วสูง
+        // นำไปเปรียบเทียบพิกเซลใน RAM
         const match = _localFaceMatcher.findBestMatch(detection.descriptor);
         
         if (match.label !== 'unknown') {
           const [studentId, firstName, lastName, classRoom] = match.label.split('_');
           const now = Date.now();
 
-          // ตรวจสอบระบบ Cooldown ป้องกันไม่ให้ชื่อเดิมเด้งซ้ำกันภายใน 4 วินาที
           if (!_studentCooldowns[studentId] || (now - _studentCooldowns[studentId] > 4000)) {
-            _studentCooldowns[studentId] = now; // ลงบันทึกเวลาที่สแกนล่าสุด
+            _studentCooldowns[studentId] = now;
 
-            // สั่งเอฟเฟกต์ไฟแฟลชสีเขียวแวบหนึ่งบนหน้าจอให้ครูรู้ว่าผ่านแล้ว
             const fl = document.getElementById('flash');
             fl.style.background = '#10b981';
             fl.classList.add('go'); 
             setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
 
-            setSt(`✨ เช็คชื่อสำเร็จ: ${firstName} (${classRoom})`, 'ready');
+            setSt(`✨ พบนักเรียน: ${firstName} (${classRoom})`, 'ready');
 
-            // 🚀 ยิงข้อมูลกลับไปที่หน้าหลักเพื่อสั่งบันทึกลง Google Sheets ทันทีอัตโนมัติ!
             if (window.opener && !window.opener.closed) {
               window.opener.postMessage({
                 type: 'REALTIME_FACE_MATCHED',
@@ -534,16 +532,22 @@ async function processVideoFrameRealtime() {
               }, _allowOrigin);
             }
           }
+        } else {
+          // 2. ➕ เพิ่มตรงนี้: ถ้าเจอหน้าคนแต่ไม่ตรงกับใครในระบบ ให้โชว์ค่าความต่าง (Distance) เพื่อให้ครูรู้ว่า AI กำลังทำงานอยู่
+          // (ค่า Distance ยิ่งเข้าใกล้ 0 ยิ่งเหมือน ถ้ารูปพรีวิวในฐานข้อมูลมืดหรือต่างจากตัวจริง ค่าจะเกิน 0.55 เลยกลายเป็น unknown)
+          setSt(`🔍 กำลังสแกน... ใบหน้าไม่ตรงกับฐานข้อมูล (ความต่าง: ${match.distance.toFixed(2)})`, 'scan');
         }
+      } else {
+        // 3. ➕ เพิ่มตรงนี้: ถ้า AI ตรวจไม่พบใบหน้ามนุษย์ในเฟรม (อาจเพราะแสงมืดไป หรือหน้าอยู่ห่างเกินไป)
+        setSt('📷 กำลังค้นหาใบหน้า... กรุณาขยับหน้าให้อยู่ในกรอบวงกลม', 'ready');
       }
     } catch (err) {
       console.error('ข้อผิดพลาดลูปรันไทม์:', err);
     }
   }
   
-  // เรียกตัวเองวนไปเรื่อยๆ เพื่อดักจับใบหน้าแบบลื่นไหลไร้รอยต่อ
   if (_scanLoopActive) {
-    setTimeout(() => { requestAnimationFrame(processVideoFrameRealtime); }, 100); // ดีเลย์ 100ms เพื่อประหยัดแบตเตอรี่เครื่อง
+    setTimeout(() => { requestAnimationFrame(processVideoFrameRealtime); }, 100);
   }
 }
 
