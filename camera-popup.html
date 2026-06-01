@@ -511,23 +511,55 @@ function startRealtimeFrameStream() {
   }, 350); 
 }
 
-// 👂 ดักรอรับผลการตรวจสอบใบหน้าที่หน้าหลักคำนวณเสร็จแล้ว สะท้อนกลับมาโชว์บนหน้าจอครู
+// 💡 ประกาศตัวแปรหน่วงเวลาไว้บนสุด (เอาไว้ล็อกไม่ให้ข้อความอื่นมาทับ)
+let _statusTimeout = null;
+
+// แทนที่บล็อกรับข้อความเดิมด้วยชุดนี้ครับ
 window.addEventListener('message', function(event) {
   const d = event.data;
   if (!d || typeof d !== 'object') return;
 
-  if (d.type === 'SCAN_SUCCESS') {
+  if (d.type === 'SCAN_PROCESSING') {
+    setSt(`⏳ กำลังบันทึกข้อมูล: ${d.name}...`, 'scan');
+    // ล็อกหน้าจอไว้ระหว่างรอฐานข้อมูล
+    if (_statusTimeout) clearTimeout(_statusTimeout);
+    _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 4000); 
+  }
+  else if (d.type === 'SCAN_SUCCESS') {
     const fl = document.getElementById('flash');
-    fl.style.background = '#10b981'; // ยิงแฟลชเขียวเมื่อบันทึกผ่านสำเร็จ
+    fl.style.background = '#10b981'; // แฟลชสีเขียว
     fl.classList.add('go'); 
     setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
+    
     setSt(`✨ บันทึกสำเร็จ: ${d.name} (${d.classRoom})`, 'ready');
+    
+    // 🔒 ล็อกข้อความสำเร็จให้ค้างไว้ 3 วินาที ห้ามใครมาทับ!
+    if (_statusTimeout) clearTimeout(_statusTimeout);
+    _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 3000);
   } 
+  else if (d.type === 'SCAN_DUPLICATE') {
+    const fl = document.getElementById('flash');
+    fl.style.background = '#f59e0b'; // แฟลชสีส้ม (ซ้ำ)
+    fl.classList.add('go'); 
+    setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
+    
+    setSt(`⚠️ เช็คชื่อไปแล้ววันนี้: ${d.name}`, 'ready');
+    
+    // 🔒 ล็อกข้อความซ้ำค้างไว้ 3 วินาที
+    if (_statusTimeout) clearTimeout(_statusTimeout);
+    _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 3000);
+  }
   else if (d.type === 'SCAN_FAILED') {
-    setSt(`🔍 กำลังสแกน... ใบหน้าไม่ตรงกับฐานข้อมูล (ความเบี่ยงเบน: ${d.distance.toFixed(2)})`, 'scan');
+    // โชว์ข้อความไม่พบข้อมูล เฉพาะตอนที่ไม่ได้ติดล็อกสำเร็จอยู่
+    if (!_statusTimeout) {
+      setSt(`🔍 ไม่พบประวัติในระบบ (ความเบี่ยงเบน: ${d.distance.toFixed(2)})`, 'scan');
+    }
   } 
   else if (d.type === 'SCAN_EMPTY') {
-    setSt('📷 กำลังค้นหาใบหน้า... กรุณาขยับเข้ามาใกล้กรอบวงกลม', 'ready');
+    // โชว์ข้อความรอรับใบหน้า เฉพาะตอนที่ไม่ได้ติดล็อกสำเร็จอยู่
+    if (!_statusTimeout) {
+      setSt('📷 กำลังรอรับใบหน้า... กรุณาขยับหน้าเข้ามาในกรอบ', 'ready');
+    }
   }
 });
 
