@@ -522,42 +522,47 @@ window.addEventListener('message', function(event) {
 
   if (d.type === 'SCAN_PROCESSING') {
     setSt(`⏳ กำลังบันทึกข้อมูล: ${d.name}...`, 'scan');
-    // ล็อกหน้าจอไว้ระหว่างรอฐานข้อมูล
     if (_statusTimeout) clearTimeout(_statusTimeout);
     _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 4000); 
   }
   else if (d.type === 'SCAN_SUCCESS') {
     const fl = document.getElementById('flash');
-    fl.style.background = '#10b981'; // แฟลชสีเขียว
-    fl.classList.add('go'); 
-    setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
+    if(fl) {
+        fl.style.background = '#10b981'; 
+        fl.classList.add('go'); 
+        setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
+    }
+    setSt(`✨ บันทึกสำเร็จ: ${d.name} ${d.classRoom ? '('+d.classRoom+')' : ''}`, 'ready');
     
-    setSt(`✨ บันทึกสำเร็จ: ${d.name} (${d.classRoom})`, 'ready');
-    
-    // 🔒 ล็อกข้อความสำเร็จให้ค้างไว้ 3 วินาที ห้ามใครมาทับ!
     if (_statusTimeout) clearTimeout(_statusTimeout);
     _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 3000);
   } 
   else if (d.type === 'SCAN_DUPLICATE') {
     const fl = document.getElementById('flash');
-    fl.style.background = '#f59e0b'; // แฟลชสีส้ม (ซ้ำ)
-    fl.classList.add('go'); 
-    setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
-    
+    if(fl) {
+        fl.style.background = '#f59e0b'; 
+        fl.classList.add('go'); 
+        setTimeout(() => { fl.classList.remove('go'); fl.style.background = '#fff'; }, 200);
+    }
     setSt(`⚠️ เช็คชื่อไปแล้ววันนี้: ${d.name}`, 'ready');
     
-    // 🔒 ล็อกข้อความซ้ำค้างไว้ 3 วินาที
     if (_statusTimeout) clearTimeout(_statusTimeout);
     _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 3000);
   }
   else if (d.type === 'SCAN_FAILED') {
-    // โชว์ข้อความไม่พบข้อมูล เฉพาะตอนที่ไม่ได้ติดล็อกสำเร็จอยู่
     if (!_statusTimeout) {
-      setSt(`🔍 ไม่พบประวัติในระบบ (ความเบี่ยงเบน: ${d.distance.toFixed(2)})`, 'scan');
+      // แยกว่าเป็นการแจ้งเตือนหาไม่เจอของ QR หรือ ใบหน้า
+      if (d.isQR) {
+        setSt(`❌ ไม่พบรหัส ${d.code} ในระบบฐานข้อมูล`, 'err');
+      } else {
+        setSt(`🔍 ไม่พบประวัติในระบบ (ความเบี่ยงเบน: ${d.distance.toFixed(2)})`, 'scan');
+      }
+      
+      if (_statusTimeout) clearTimeout(_statusTimeout);
+      _statusTimeout = setTimeout(() => { _statusTimeout = null; }, 3000);
     }
   } 
   else if (d.type === 'SCAN_EMPTY') {
-    // โชว์ข้อความรอรับใบหน้า เฉพาะตอนที่ไม่ได้ติดล็อกสำเร็จอยู่
     if (!_statusTimeout) {
       setSt('📷 กำลังรอรับใบหน้า... กรุณาขยับหน้าเข้ามาในกรอบ', 'ready');
     }
