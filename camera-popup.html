@@ -26,7 +26,6 @@ body{
   min-height:100dvh;
   display:flex;flex-direction:column;align-items:center;
   overflow-x:hidden;
-  /* subtle pastel bg pattern */
   background-image:
     radial-gradient(circle at 15% 15%,rgba(167,139,250,0.18) 0%,transparent 50%),
     radial-gradient(circle at 85% 80%,rgba(147,197,253,0.18) 0%,transparent 50%);
@@ -257,7 +256,6 @@ input[type=range]{width:100%;accent-color:var(--p1);cursor:pointer;}
 <body>
 <div class="wrap">
 
-  <!-- HEADER -->
   <div class="hdr">
     <div class="logo">📷</div>
     <div>
@@ -267,14 +265,12 @@ input[type=range]{width:100%;accent-color:var(--p1);cursor:pointer;}
     <button class="btn-x" onclick="closePopup()">✕</button>
   </div>
 
-  <!-- TABS -->
   <div class="tabs">
     <button class="tab active" id="tab-face"  onclick="switchMode('face')">🤖 ใบหน้า</button>
     <button class="tab"        id="tab-qr"    onclick="switchMode('qr')">📱 QR</button>
     <button class="tab"        id="tab-photo" onclick="switchMode('photo')">🖼 โปรไฟล์</button>
   </div>
 
-  <!-- VIEWFINDER -->
   <div class="vf-wrap" id="vf">
     <video id="vid" autoplay playsinline muted></video>
     <img id="prev-img" alt="ภาพที่ถ่าย">
@@ -290,32 +286,27 @@ input[type=range]{width:100%;accent-color:var(--p1);cursor:pointer;}
     </div>
   </div>
 
-  <!-- STATUS -->
   <div class="status">
     <div class="sdot idle" id="sdot"></div>
     <span id="stxt">พร้อมใช้งาน — กด "เปิดกล้อง"</span>
   </div>
 
-  <!-- OPEN / STOP ROW -->
   <div class="row" id="row-open">
     <button class="btn btn-pri" id="btn-open" onclick="openCam()">📷 เปิดกล้อง</button>
     <button class="btn btn-del" id="btn-stop" onclick="stopCam()" style="display:none;flex:0 0 auto;padding:11px 16px;">⏹ หยุด</button>
   </div>
 
-  <!-- SHUTTER + FLIP -->
   <div class="shutter-row" id="row-shutter" style="display:none;">
     <button class="flip-btn" onclick="flipCam()" title="สลับกล้อง">🔄</button>
     <button class="shutter"  id="btn-shoot" onclick="shoot()">📸</button>
     <div style="width:46px;"></div>
   </div>
 
-  <!-- QUALITY (photo mode) -->
   <div id="row-quality" style="display:none;">
     <div class="qlabel"><span>คุณภาพภาพ</span><span id="qval">88%</span></div>
     <input type="range" id="qslider" min="40" max="100" value="88" oninput="setQ(this.value)">
   </div>
 
-  <!-- QR MANUAL -->
   <div id="row-qr-manual" style="display:none;">
     <label class="lbl">หรือพิมพ์รหัส QR / รหัสนักเรียน</label>
     <div class="row">
@@ -324,7 +315,6 @@ input[type=range]{width:100%;accent-color:var(--p1);cursor:pointer;}
     </div>
   </div>
 
-  <!-- QR RESULT -->
   <div class="qr-res" id="qr-res">
     <div class="qr-code-val" id="qr-code-val">-</div>
     <div style="font-size:11px;color:#065f46;margin-top:3px;">รหัสที่สแกนได้ — ยืนยันเพื่อส่งกลับระบบ</div>
@@ -334,7 +324,6 @@ input[type=range]{width:100%;accent-color:var(--p1);cursor:pointer;}
     </div>
   </div>
 
-  <!-- CONFIRM (face/photo) -->
   <div class="confirm-card" id="confirm-card">
     <div style="font-size:12px;color:#4338ca;font-weight:600;" id="confirm-hint">
       ตรวจสอบรูปภาพ แล้วกด "ตกลง ใช้รูปนี้" เพื่อส่งกลับระบบ
@@ -345,7 +334,6 @@ input[type=range]{width:100%;accent-color:var(--p1);cursor:pointer;}
     </div>
   </div>
 
-  <!-- INFO -->
   <div class="info">
     💡 หน้านี้เปิดเป็น popup แยกต่างหาก เพื่อให้เข้าถึงกล้องได้เต็มที่<br>
     รูปภาพจะถูกส่งกลับไปยังระบบโดยอัตโนมัติเมื่อกดยืนยัน
@@ -359,6 +347,7 @@ input[type=range]{width:100%;accent-color:var(--p1);cursor:pointer;}
 let _stream = null, _facing = 'user', _b64 = null;
 let _mode = 'face', _q = 0.88;
 let _qrInt = null, _lastQR = '', _qrCool = false;
+let _faceInt = null; // 💡 เพิ่มตัวแปรเก็บ Interval สำหรับสตรีมสแกนใบหน้าเรียลไทม์
 let _allowOrigin = '*';
 
 // ── INIT ──────────────────────────────────────────────────────
@@ -368,9 +357,17 @@ let _allowOrigin = '*';
   const o = p.get('origin');
   if(o) _allowOrigin = decodeURIComponent(o);
   switchMode(m, true);
-  // auto-open
   openCam();
 })();
+
+// ── LISTEN COMMAND FROM PARENT ────────────────────────────────
+// 💡 รอรับคำสั่ง "STOP_STREAM" จากหน้าแอปหลักเมื่อวิเคราะห์ใบหน้าเสร็จ เพื่อปิดป๊อปอัปอัตโนมัติ
+window.addEventListener('message', function(e) {
+  if (e.data === 'STOP_STREAM' || (e.data && e.data.type === 'STOP_STREAM')) {
+    stopCam();
+    window.close();
+  }
+});
 
 // ── MODE ──────────────────────────────────────────────────────
 function switchMode(m, silent){
@@ -378,7 +375,7 @@ function switchMode(m, silent){
   ['face','qr','photo'].forEach(x =>
     document.getElementById('tab-'+x).classList.toggle('active', x===m)
   );
-  // overlay
+  
   const fr = document.getElementById('face-ring');
   const sl = document.getElementById('scan-ln');
   const ol = document.getElementById('vf-ol');
@@ -390,8 +387,8 @@ function switchMode(m, silent){
   if(m==='face'){
     fr.style.display = '';
     _facing = 'user';
-    document.getElementById('hdr-sub').textContent = 'โหมด: สแกนใบหน้า AI';
-    document.getElementById('confirm-hint').textContent = 'ตรวจสอบใบหน้า แล้วกด "ตกลง ใช้รูปนี้" เพื่อวิเคราะห์';
+    document.getElementById('hdr-sub').textContent = 'โหมด: สแกนใบหน้า AI (เรียลไทม์)';
+    document.getElementById('confirm-hint').textContent = 'ระบบกำลังวิเคราะห์ใบหน้าอัตโนมัติแบบเรียลไทม์...';
   } else if(m==='qr'){
     const d=document.createElement('div'); d.className='qr-box'; ol.appendChild(d);
     sl.style.display = '';
@@ -405,6 +402,7 @@ function switchMode(m, silent){
   document.getElementById('row-quality').style.display   = m==='photo' ? '' : 'none';
   document.getElementById('row-qr-manual').style.display = m==='qr'    ? '' : 'none';
   document.getElementById('qr-res').classList.remove('show');
+  document.getElementById('confirm-card').classList.remove('show');
   if(_stream && !silent){ stopCam(true); setTimeout(openCam, 280); }
 }
 
@@ -418,16 +416,30 @@ function openCam(){
     _stream = s;
     const v = document.getElementById('vid');
     v.srcObject = s; v.style.display = 'block';
+    
+    // 💡 เพิ่มกระจกเงา (Mirror effect) ให้กับกล้องหน้าเพื่อความคุ้นชินของผู้ใช้งาน
+    v.style.transform = _facing === 'user' ? 'scaleX(-1)' : 'none';
+
     document.getElementById('no-cam').style.display = 'none';
     document.getElementById('prev-img').style.display = 'none';
     document.getElementById('prev-badge').style.display = 'none';
     document.getElementById('btn-open').style.display = 'none';
     document.getElementById('btn-stop').style.display = 'flex';
-    document.getElementById('row-shutter').style.display = 'flex';
+    
+    // 💡 เปิดแสดงแถบปุ่มชัตเตอร์เฉพาะโหมดโปรไฟล์ (Manual Photo) เท่านั้น โหมดสแกนจะซ่อนไป
+    document.getElementById('row-shutter').style.display = _mode === 'photo' ? 'flex' : 'none';
     document.getElementById('confirm-card').classList.remove('show');
     _b64 = null;
-    if(_mode==='qr') startQR();
-    setSt('กล้องพร้อมใช้งาน','ready');
+    
+    if(_mode==='qr') {
+      startQR();
+      setSt('กำลังสแกน QR...','scan');
+    } else if(_mode==='face') {
+      startFaceStream(); // 💡 เริ่มลูปส่งเฟรมภาพเรียลไทม์ฝั่งใบหน้า
+      setSt('กำลังสแกนใบหน้าเรียลไทม์...','scan');
+    } else {
+      setSt('กล้องพร้อมใช้งาน','ready');
+    }
   }).catch(e=>{
     setSt('ไม่สามารถเปิดกล้อง: '+e.message,'err');
     document.getElementById('no-cam').innerHTML =
@@ -437,6 +449,7 @@ function openCam(){
 
 function stopCam(silent){
   if(_qrInt){ clearInterval(_qrInt); _qrInt=null; }
+  if(_faceInt){ clearInterval(_faceInt); _faceInt=null; } // 💡 เคลียร์ลูปเฟรมสแกนหน้าเมื่อหยุดกล้อง
   if(_stream){ _stream.getTracks().forEach(t=>t.stop()); _stream=null; }
   const v=document.getElementById('vid'); if(v){ v.srcObject=null; v.style.display='none'; }
   document.getElementById('no-cam').style.display='flex';
@@ -451,7 +464,7 @@ function flipCam(){
   stopCam(true); setTimeout(openCam, 250);
 }
 
-// ── SHOOT ─────────────────────────────────────────────────────
+// ── SHOOT (Manual for Profile Photo Mode) ─────────────────────
 function shoot(){
   if(!_stream){ setSt('กรุณาเปิดกล้องก่อน','err'); return; }
   const v=document.getElementById('vid');
@@ -461,10 +474,10 @@ function shoot(){
   if(_facing==='user'){ ctx.translate(c.width,0); ctx.scale(-1,1); }
   ctx.drawImage(v,0,0);
   _b64 = c.toDataURL('image/jpeg',_q);
-  // flash
+  
   const fl=document.getElementById('flash');
   fl.classList.add('go'); setTimeout(()=>fl.classList.remove('go'),130);
-  // show preview
+  
   const pi=document.getElementById('prev-img');
   pi.src=_b64; pi.style.display='block';
   document.getElementById('vid').style.display='none';
@@ -481,9 +494,42 @@ function retake(){
   document.getElementById('prev-badge').style.display='none';
   document.getElementById('confirm-card').classList.remove('show');
   document.getElementById('vid').style.display='block';
-  document.getElementById('row-shutter').style.display='flex';
+  document.getElementById('row-shutter').style.display = _mode === 'photo' ? 'flex' : 'none';
   if(_mode==='qr') startQR();
-  setSt('พร้อมถ่ายภาพ','ready');
+  if(_mode==='face') startFaceStream();
+  setSt('พร้อมใช้งาน','ready');
+}
+
+// ── REAL-TIME FACE STREAM ─────────────────────────────────────
+// 💡 ฟังก์ชันทำงานเบื้องหลังคอยวาดภาพสแกนใบหน้าส่งกลับระบบหลักอัตโนมัติแบบเรียลไทม์
+function startFaceStream() {
+  if(_faceInt) clearInterval(_faceInt);
+  const v = document.getElementById('vid');
+  const c = document.getElementById('cvs');
+  const ctx = c.getContext('2d');
+  
+  _faceInt = setInterval(() => {
+    if(!_stream) return;
+    if(v.readyState < v.HAVE_ENOUGH_DATA) return;
+    c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
+    
+    // วาดภาพสลับด้านซ้ายขวาให้สมบูรณ์สำหรับกล้องหน้าเซลฟี่
+    if(_facing === 'user') {
+      ctx.save();
+      ctx.translate(c.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(v, 0, 0, c.width, c.height);
+      ctx.restore();
+    } else {
+      ctx.drawImage(v, 0, 0, c.width, c.height);
+    }
+    
+    // สกัดภาพออกเป็น Base64 ความละเอียด 0.6 (โหลดไวและประมวลผลเร็ว) ส่งตรงกลับแอปหลักทันที
+    _b64 = c.toDataURL('image/jpeg', 0.6);
+    if(window.opener && !window.opener.closed) {
+      window.opener.postMessage({type:'CAMERA_IMAGE', image:_b64, mode:'face'}, _allowOrigin);
+    }
+  }, 800); // 💡 สตรีมภาพออกไปทุกๆ 800 มิลลิวินาที
 }
 
 // ── QR ────────────────────────────────────────────────────────
