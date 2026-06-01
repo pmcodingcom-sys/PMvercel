@@ -373,6 +373,7 @@ let _streamInterval = null;
   openCam();
 })();
 
+// ค้นหาฟังก์ชัน switchMode() ใน camera-popup.html แล้วแทนที่ด้วยชุดนี้ครับ
 function switchMode(m, silent){
   _mode = m;
   ['face','qr','photo'].forEach(x => document.getElementById('tab-'+x).classList.toggle('active', x===m));
@@ -395,6 +396,12 @@ function switchMode(m, silent){
   document.getElementById('row-quality').style.display   = m==='photo' ? '' : 'none';
   document.getElementById('row-qr-manual').style.display = m==='qr'    ? '' : 'none';
   document.getElementById('qr-res').classList.remove('show');
+  
+  // 🛠️ แก้ไขตรงนี้เช่นกัน: ดักสถานะปุ่มตอนกดสลับแท็บโหมดกล้อง
+  if (_stream) {
+    document.getElementById('row-shutter').style.display = 'flex';
+    document.getElementById('btn-shoot').style.display = m === 'photo' ? 'flex' : 'none';
+  }
   
   if(_stream && !silent){ stopCam(true); setTimeout(openCam, 280); }
 }
@@ -445,11 +452,12 @@ if (d.type === 'SET_FACE_CACHE' && d.cache) {
 });
 
 // ➕ ฟังก์ชันเปิดกล้องเดิม: เพิ่มการยิงสัญญาณบอกหน้าหลักว่ากล้องตื่นแล้ว มารับตัวเลขสแกนได้เลย
+// ค้นหาฟังก์ชัน openCam() ใน camera-popup.html แล้วแทนที่ด้วยชุดนี้ครับ
 function openCam(){
   if(_stream) return;
   setSt('กำลังเปิดระบบกล้อง...','scan');
   navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:_facing, width:{ideal:480}, height:{ideal:360} } // สเกลขนาดภาพที่พอดี เพื่อให้ส่งข้อมูลข้ามหน้าต่างได้เร็วที่สุด
+    video:{ facingMode:_facing, width:{ideal:480}, height:{ideal:360} }
   }).then(s=>{
     _stream = s;
     const v = document.getElementById('vid');
@@ -458,7 +466,11 @@ function openCam(){
     document.getElementById('prev-img').style.display = 'none';
     document.getElementById('btn-open').style.display = 'none';
     document.getElementById('btn-stop').style.display = 'flex';
-    document.getElementById('row-shutter').style.display = _mode === 'photo' ? 'flex' : 'none';
+    
+    // 🛠️ แก้ไขตรงนี้: โชว์แถบปุ่มตลอดเวลา แต่ให้ปุ่มถ่ายรูปโชว์เฉพาะโหมด Photo
+    document.getElementById('row-shutter').style.display = 'flex';
+    document.getElementById('btn-shoot').style.display = _mode === 'photo' ? 'flex' : 'none';
+    
     document.getElementById('confirm-card').classList.remove('show');
     _b64 = null;
     
@@ -466,7 +478,7 @@ function openCam(){
       startQR();
     } else if(_mode === 'face') {
       setSt('กล้องพร้อมตรวจจับ — กรุณาส่องใบหน้า','ready');
-      startRealtimeFrameStream(); // ⚡ เริ่มลูปยิงภาพสดกลับหน้าหลักทันที
+      startRealtimeFrameStream(); 
     }
   }).catch(e=>{
     setSt('เปิดกล้องพลาด: '+e.message,'err');
