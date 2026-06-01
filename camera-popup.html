@@ -673,8 +673,7 @@ function retake(){
   setSt('พร้อมถ่ายภาพ','ready');
 }
 
-// ── QR ────────────────────────────────────────────────────────
-let _qrCool = false;
+// ── QR ───────────────────────────────────────────────────────
 
 function startQR() {
   if (_qrInt) clearInterval(_qrInt);
@@ -694,21 +693,27 @@ function startQR() {
     try {
       if (typeof jsQR !== 'undefined') {
         const imgData = ctx.getImageData(0, 0, c.width, c.height);
-        const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "dontInvert" });
+        
+        // 🚀 อัปเกรดเป็น attemptBoth: ทำให้สแกนง่ายขึ้นและรองรับ QR สลับสี
+        const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "attemptBoth" });
         
         if (code && code.data && code.data !== _lastQR) {
           _lastQR = code.data;
           _qrCool = true;
-          setTimeout(() => { _qrCool = false; _lastQR = ''; }, 3000); // หน่วงเวลา 3 วิ ไม่ให้สแกนรหัสเดิมรัวๆ
+          setTimeout(() => { _qrCool = false; _lastQR = ''; }, 3000); 
           
-          // 🚀 เจอคิวอาร์ปุ๊บ ยิงรหัสกลับหน้าหลักให้ตรวจสอบทันที!
+          // 💡 ➕ เพิ่มตรงนี้: ทันทีที่อ่าน QR ออก ให้เปลี่ยนข้อความบนจอกล้องทันที!
+          setSt(`⏳ อ่านรหัสได้: ${code.data} กำลังตรวจสอบ...`, 'scan');
+          
           if (window.opener && !window.opener.closed) {
             window.opener.postMessage({ type: 'QR_CODE_REALTIME', code: code.data }, _allowOrigin);
           }
         }
+      } else {
+        setSt('❌ ระบบอ่าน QR (jsQR) โหลดไม่สมบูรณ์', 'err');
       }
     } catch(e) {}
-  }, 300); // ตั้งให้สแกนทุก ๆ 300 มิลลิวินาที
+  }, 300); 
 }
 
 // 2️⃣ ปรับปรุงเงื่อนไขแจ้งเตือนเวลาไม่พบ QR ใน window.addEventListener('message') เล็กน้อย
