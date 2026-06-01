@@ -570,7 +570,11 @@ function startFaceStream() {
   
   _faceInt = setInterval(() => {
     if(!_stream) return;
-    if(v.readyState < v.HAVE_ENOUGH_DATA) return;
+    
+    // 💡 ปรับปรุงตรงนี้: เปลี่ยนจาก readyState เป็นตรวจเช็คขนาดวิดีโอแทน 
+    // เพื่อป้องกันไม่ให้ลูปกล้องหยุดส่งข้อมูล (นิ่ง) เวลาหน้าต่าง Popup เสียโฟกัสไปแอบอยู่หลังหน้าจอหลัก
+    if(v.videoWidth === 0) return;
+    
     c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
     
     if(_facing === 'user') {
